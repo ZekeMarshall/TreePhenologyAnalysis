@@ -1,0 +1,208 @@
+---
+title: "TreePhenology"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load required packages
+library(reticulate)
+
+# Set the path to the desired python distribution.
+# You will need to start a new terminal session if this changes.
+# If you restart R you will have to run this chunk again.
+Sys.setenv(RETICULATE_PYTHON = "C:/ProgramData/Miniconda3/python.exe")
+           
+```
+
+## Import required packaes from python
+
+```{python imports}
+
+import pandas as pd
+
+from pyinaturalist import get_observations
+
+from pyinaturalist_convert import to_dataframe
+
+
+```
+
+## Selected Species - Native Trees
+
+The species of interest for this analysis are the native trees of the British Isles. The definition of a 'native' tree is partially subjective, depending on the time selected to act as the dividing...., the height a self-supported woody plant must reach, and distinction between a species and micro-species.
+
+```{python species}
+
+selected_species = ["Acer campestre", "Alnus glutinosa", "Arbutus unedo", "Betula pendula", "Betula pubescens",  "Buxus sempervirens", "Carpinus betulus", "Cornus sanguinea", "Corylus avellana", "Crataegus laevigata", "Crataegus monogyna", "Euonymus europaeus", "Fagus sylvatica", "Frangula alnus", "Fraxinus excelsior", "Hippophae rhamnoides", "Ilex aquifolium", "Juniperus communis", "Ligustrum vulgare", "Malus sylvestris", "Pinus sylvestris", "Populus nigra", "Populus tremula", "Prunus avium", "Prunus padus", "Prunus spinosa", "Quercus petraea", "Quercus robur", "Rhamnus cathartica", "Salix caprea", "Salix cinerea", "Salix pentandra", "Salix phylicifolia", "Sambucus nigra", "Sorbus aria", "Sorbus aucuparia", "Sorbus domestica", "Sorbus torminalis", "Taxus baccata", "Tilia cordata", "Tilia platyphyllos", "Tilia x europaea", "Ulmus glabra", "Ulmus minor", "Viburnum lantana", "Viburnum opulus"]
+
+
+
+```
+
+## Get phenology for all selected species
+
+The python package `pyinaturalist` facilitates the efficient retrieval of data from the iNaturalist platform via their API. Particularly useful is the ability to retrieve observations based on the additional 'Observation' fields and 'Annotations'.
+
+Data retrieved via `pyinaturalist` is returned in JSON format; the package `pyinaturalist-convert` provides useful functions to convert data retrieved from iNaturalist into a variety of output formats. For the purposes of this analysis, the iNaturalist data is simply returned as a tidy data frame for use in this R Markdown document.
+
+Requests made to the iNaturalist API are limited to 10,000 ......
+
+```{python get_data, include=FALSE}
+
+fruiting_data = pd.DataFrame()
+
+for species in selected_species:
+  
+  observation = get_observations(taxon_name = species, term_id = "12", term_value_id = "14", place_id = "6857")
+  observation_df = to_dataframe(observation)
+  
+  if observation_df.shape[0] <= 3:
+    continue
+  
+  observation_df = observation_df.loc[:,["id","time_observed_at"]]
+  observation_df.insert(loc = 0, column = "species", value = species)
+  
+  fruiting_data = pd.concat([fruiting_data, observation_df])
+
+
+```
+
+## Switch to R, tidy dates
+
+After retrieving the required data in Python a switch to the R language is made, to clean the tidy using the `lubridate` package.
+
+```{r tidy}
+
+fruiting_data_r <- py$fruiting_data
+
+fruiting_r_trimmed <- fruiting_data_r |>
+  dplyr::filter(time_observed_at != "NULL") |> 
+  dplyr::mutate(time_observed_at = lubridate::ymd_hms(time_observed_at)) |> 
+  dplyr::mutate(month = lubridate::month(time_observed_at)) |> 
+  dplyr::mutate(yday = lubridate::yday(time_observed_at))
+
+```
+
+## Clean data
+
+Observations for the fruiting time of trees on iNaturalist appear to include various stages of a fruits development, rather than the time when the fruit was observed to be ripe.
+
+To ensure that our mean seed collection time is not skewed the observations with dates outside the reasonable range of when a fruit is ripe need to be excluded.
+
+To do this I note that observations are "Mis-recorded" if they are outside the probable range, and "Probably ok" if they are inside the probable range; with the probable range being determined by a review of the literature. The observations which are "Mis-recorded" are then removed.
+
+```{r clean}
+
+fruiting_r_cleaned <- fruiting_r_trimmed |>
+  dplyr::mutate(
+    status = dplyr::case_when(
+      species == "Acer campestre" & month > 11 | species == "Acer campestre" & month < 8 ~ "Mis-recorded",
+      species == "Alnus glutinosa" & month > 12 | species == "Alnus glutinosa" & month < 8 ~ "Mis-recorded",
+      # species == "Arbutus unedo" & month > 11 | species == "Arbutus unedo" & month < 8 ~ "Mis-recorded",
+      species == "Cornus sanguinea" & month > 11 | species == "Cornus sanguinea" & month < 8 ~ "Mis-recorded",
+      species == "Corylus avellana" & month > 11 | species == "Corylus avellana" & month < 8 ~ "Mis-recorded",
+      species == "Crataegus laevigata" & month > 12 | species == "Crataegus laevigata" & month < 8 ~ "Mis-recorded",
+      species == "Crataegus monogyna" & month > 12 | species == "Crataegus monogyna" & month < 8 ~ "Mis-recorded",
+      species == "Euonymus europaeus" & month > 12 | species == "Euonymus europaeus" & month < 8 ~ "Mis-recorded",
+      species == "Fagus sylvatica" & month > 12 | species == "Fagus sylvatica" & month < 8 ~ "Mis-recorded",
+      species == "Frangula alnus" & month > 11 | species == "Frangula alnus" & month < 8 ~ "Mis-recorded",
+      species == "Fraxinus excelsior" & month > 12 | species == "Fraxinus excelsior" & month < 7 ~ "Mis-recorded",
+      species == "Hippophae rhamnoides" & month > 3 & month < 8 ~ "Mis-recorded",
+      species == "Ilex aquifolium" & month > 3 & month < 10 ~ "Mis-recorded",
+      # species == "Ligustrum vulgare" & month > 11 | species == "Ligustrum vulgare" & month < 8 ~ "Mis-recorded",
+      species == "Malus sylvestris" & month > 11 | species == "Malus sylvestris" & month < 8 ~ "Mis-recorded",
+      species == "Prunus avium" & month > 8 | species == "Prunus avium" & month < 6 ~ "Mis-recorded",
+      species == "Prunus spinosa" & month > 11 | species == "Prunus spinosa" & month < 8 ~ "Mis-recorded",
+      species == "Quercus robur" & month > 12 | species == "Quercus robur" & month < 8 ~ "Mis-recorded",
+      species == "Rhamnus cathartica" & month > 11 | species == "Rhamnus cathartica" & month < 9 ~ "Mis-recorded",
+      species == "Sambucus nigra" & month > 11 | species == "Sambucus nigra" & month < 8 ~ "Mis-recorded",
+      species == "Sorbus aria" & month > 10 | species == "Sorbus aria" & month < 8 ~ "Mis-recorded",
+      species == "Sorbus aucuparia" & month > 11 | species == "Sorbus aucuparia" & month < 7 ~ "Mis-recorded",
+      species == "Tilia cordata" & month > 11 | species == "Tilia cordata" & month < 9 ~ "Mis-recorded",
+      species == "Tilia x europaea" & month > 11 | species == "Tilia x europaea" & month < 9 ~ "Mis-recorded",
+      species == "Ulmus glabra" & month > 7 | species == "Ulmus glabra" & month < 4 ~ "Mis-recorded",
+      species == "Viburnum lantana" & month > 10 | species == "Viburnum lantana" & month < 6 ~ "Mis-recorded",
+      species == "Viburnum opulus" & month > 10 | species == "Viburnum opulus" & month < 7 ~ "Mis-recorded",
+      TRUE ~ "Probably ok"
+    )
+  ) |> 
+  dplyr::filter(status != "Mis-recorded") |>
+  dplyr::select(-status)
+
+
+```
+
+## Plot ridgeline calendar
+
+To best visualise the fruiting times (or seed collection times) of each tree information on the likelihood of finding a ripe fruit at a given time must be included. In other words it would be misrepresentative to indicate that the chance of finding a ripe acorn during the beginning of September is equal to chance of finding one in late September.
+
+The R package `ggridges`
+
+```{r ridgeline}
+
+calendar <- ggplot2::ggplot(fruiting_r_cleaned, 
+                            ggplot2::aes(x = yday, 
+                                         y = forcats::fct_rev(species),
+                                         # height = ..density..
+                                         fill = 0.5 - abs(0.5 - stat(ecdf))
+                                         )
+                            ) +
+              # ggridges::geom_density_ridges(stat = "density", trim = TRUE) +
+              ggridges::stat_density_ridges(geom = "density_ridges_gradient",
+                                            calc_ecdf = TRUE,
+                                            scale = 0.9,
+                                            rel_min_height = 0.01) +
+              ggplot2::scale_fill_viridis_c(name = "Tail probability", direction = -1) +
+              ggplot2::scale_x_continuous(breaks = seq(0, 380, 30),
+                                          # guide=guide_axis(angle=90),
+                                          labels = c("Jan", "Feb", "Mar",
+                                                     "Apr", "May", "Jun",
+                                                     "Jul", "Aug", "Sep",
+                                                     "Oct", "Nov", "Dec",
+                                                     "")
+                                          ) +
+              ggplot2::coord_cartesian(clip = "on") +
+              ggridges::theme_ridges() +
+              ggplot2::labs(title = 'Seed Collection Calendar for Native Trees') +
+              ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust = -0.15),
+                             plot.title = ggplot2::element_text(size = 20,
+                                                                hjust = 0.5,
+                                                                margin = ggplot2::margin(0,0,30,0)),
+                             axis.title.x = ggplot2::element_blank(),
+                             axis.title.y = ggplot2::element_blank(),
+                             legend.position = "none"
+
+                           )
+              NULL
+
+```
+
+```{r save_ridgeline, message=FALSE, warning=FALSE, include=FALSE}
+
+aspect_ratio <- 0.8
+height <- 13
+ggplot2::ggsave("calendar.png", height = height, width = height * aspect_ratio)
+
+```
+
+```{r obs_count}
+
+fruiting_count <- fruiting_r_cleaned |>
+  dplyr::count(species)
+
+count_barchart <- ggplot2::ggplot(fruiting_r_cleaned, ggplot2::aes(forcats::fct_rev(species))) +
+  ggplot2::geom_bar() +
+  ggplot2::coord_flip() +
+  ggplot2::xlab("Species") +
+  ggplot2::ylab("Number of credible observations [-]")
+
+aspect_ratio_bc <- 2
+height_bc <- 8
+ggplot2::ggsave("count_barchart.png", height = height_bc, width = height_bc * aspect_ratio_bc)
+
+
+count_barchart
+
+```
