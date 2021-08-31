@@ -31,7 +31,11 @@ from pyinaturalist_convert import to_dataframe
 
 ## Selected Species - Native Trees
 
-The species of interest for this analysis are the native trees of the British Isles. The definition of a 'native' tree is partially subjective, depending on the time selected to act as the dividing...., the height a self-supported woody plant must reach, and distinction between a species and micro-species.
+The species of interest for this analysis are the native trees of the British Isles. 
+The definition of a 'native' tree is partially subjective, depending on the time 
+of seperation from Europe, the height a self-supported woody plant must reach, 
+and distinction between a species and micro-species. For this analysis I use the
+following list.
 
 ```{python species}
 
@@ -43,11 +47,22 @@ selected_species = ["Acer campestre", "Alnus glutinosa", "Arbutus unedo", "Betul
 
 ## Get phenology for all selected species
 
-The python package `pyinaturalist` facilitates the efficient retrieval of data from the iNaturalist platform via their API. Particularly useful is the ability to retrieve observations based on the additional 'Observation' fields and 'Annotations'.
+The python package `pyinaturalist` facilitates the efficient retrieval of data from 
+the iNaturalist platform via their API. Particularly useful is the ability to 
+retrieve observations based on the additional 'Observation' and 'Annotations' fields.
 
-Data retrieved via `pyinaturalist` is returned in JSON format; the package `pyinaturalist-convert` provides useful functions to convert data retrieved from iNaturalist into a variety of output formats. For the purposes of this analysis, the iNaturalist data is simply returned as a tidy data frame for use in this R Markdown document.
+Data retrieved via `pyinaturalist` is returned in JSON format; the package 
+`pyinaturalist-convert` provides useful functions to convert data retrieved from 
+iNaturalist into a variety of output formats. For the purposes of this analysis, 
+the iNaturalist data is simply returned as a tidy data frame for use in this 
+R Markdown document.
 
-Requests made to the iNaturalist API are limited to 10,000 ......
+iNaturalist state that "Please note that we throttle API usage to a max of 100 
+requests per minute, though we ask that you try to keep it to 60 requests per 
+minute or lower, and to keep under 10,000 requests per day. If we notice usage 
+that has serious impact on our performance we may institute blocks without 
+notification." (https://api.inaturalist.org/v1/docs/). So ensure that the 
+search terms you are using don't result in these limits being exceeded.
 
 ```{python get_data, include=FALSE}
 
@@ -58,6 +73,8 @@ for species in selected_species:
   observation = get_observations(taxon_name = species, term_id = "12", term_value_id = "14", place_id = "6857")
   observation_df = to_dataframe(observation)
   
+  # Species with three or less observations are not included.
+  # This threshold will be increased as data availability improves.
   if observation_df.shape[0] <= 3:
     continue
   
@@ -71,7 +88,8 @@ for species in selected_species:
 
 ## Switch to R, tidy dates
 
-After retrieving the required data in Python a switch to the R language is made, to clean the tidy using the `lubridate` package.
+After retrieving the required data in Python a switch to the R language is made, 
+to tidy the data using the `lubridate` package.
 
 ```{r tidy}
 
@@ -87,11 +105,17 @@ fruiting_r_trimmed <- fruiting_data_r |>
 
 ## Clean data
 
-Observations for the fruiting time of trees on iNaturalist appear to include various stages of a fruits development, rather than the time when the fruit was observed to be ripe.
+Observations for the fruiting time of trees in iNaturalist appear to include 
+various stages of a fruits development, rather than the time when the fruit was 
+observed to be ripe.
 
-To ensure that our mean seed collection time is not skewed the observations with dates outside the reasonable range of when a fruit is ripe need to be excluded.
+To ensure that our mean seed collection time is not skewed the observations with 
+dates outside the reasonable range of when a fruit is ripe need to be excluded.
 
-To do this I note that observations are "Mis-recorded" if they are outside the probable range, and "Probably ok" if they are inside the probable range; with the probable range being determined by a review of the literature. The observations which are "Mis-recorded" are then removed.
+To do this I note that observations are "Mis-recorded" if they are outside the 
+probable range, and "Probably ok" if they are inside the probable range; with 
+the probable range being determined by a review of the literature. 
+The observations which are "Mis-recorded" are then removed.
 
 ```{r clean}
 
@@ -136,9 +160,12 @@ fruiting_r_cleaned <- fruiting_r_trimmed |>
 
 ## Plot ridgeline calendar
 
-To best visualise the fruiting times (or seed collection times) of each tree information on the likelihood of finding a ripe fruit at a given time must be included. In other words it would be misrepresentative to indicate that the chance of finding a ripe acorn during the beginning of September is equal to chance of finding one in late September.
-
-The R package `ggridges`
+To best visualise the fruiting times (or seed collection times) of each tree 
+information on the likelihood of finding a ripe fruit at a given time must be 
+included. In other words it would be mis-representative to indicate that the 
+chance of finding a ripe acorn during the beginning of September is equal to 
+chance of finding one in late September. To visually encode this information,
+a ridgeline plot is used, facilitated by the R package `ggridges`.
 
 ```{r ridgeline}
 
