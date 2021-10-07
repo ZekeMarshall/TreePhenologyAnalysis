@@ -75,7 +75,7 @@ for species in selected_species:
   
   # Species with three or less observations are not included.
   # This threshold will be increased as data availability improves.
-  if observation_df.shape[0] <= 3:
+  if observation_df.shape[0] < 1:
     continue
   
   observation_df = observation_df.loc[:,["id","time_observed_at"]]
@@ -103,14 +103,41 @@ fruiting_r_trimmed <- fruiting_data_r |>
 
 ```
 
-## Clean data
+## Inspect data
+
+Before creating a calendar the distribution of the data must be inspected.
 
 Observations for the fruiting time of trees in iNaturalist appear to include 
 various stages of a fruits development, rather than the time when the fruit was 
-observed to be ripe.
+observed to be ripe, or the 'first ripe fruit' as in the Woodland Trust's Nature's
+Calendar project.
+
+There is a further complication in that the ripe fruits of some tree species
+persist through winter, such as Holly, and so observations which are classed as
+statistical outliers..........
 
 To ensure that our mean seed collection time is not skewed the observations with 
 dates outside the reasonable range of when a fruit is ripe need to be excluded.
+
+
+
+``` {r boxplots}
+
+boxplot <- ggplot2::ggplot(fruiting_r_trimmed, ggplot2::aes(x = yday, 
+                                                            y = forcats::fct_rev(species))
+                           ) +
+  ggplot2::geom_boxplot() +
+  # ggplot2::coord_flip() +
+  ggplot2::xlab("Species") +
+  ggplot2::ylab("Number of credible observations [-]")
+
+boxplot
+  
+
+```
+
+
+## Manually clean data
 
 To do this I note that observations are "Mis-recorded" if they are outside the 
 probable range, and "Probably ok" if they are inside the probable range; with 
@@ -125,6 +152,9 @@ fruiting_r_cleaned <- fruiting_r_trimmed |>
       species == "Acer campestre" & month > 11 | species == "Acer campestre" & month < 8 ~ "Mis-recorded",
       species == "Alnus glutinosa" & month > 12 | species == "Alnus glutinosa" & month < 8 ~ "Mis-recorded",
       # species == "Arbutus unedo" & month > 11 | species == "Arbutus unedo" & month < 8 ~ "Mis-recorded",
+      # species == "Betula pendula"
+      # species == "Betula pubescens"
+      # species == "Carpimus betulus"
       species == "Cornus sanguinea" & month > 11 | species == "Cornus sanguinea" & month < 8 ~ "Mis-recorded",
       species == "Corylus avellana" & month > 11 | species == "Corylus avellana" & month < 8 ~ "Mis-recorded",
       species == "Crataegus laevigata" & month > 12 | species == "Crataegus laevigata" & month < 8 ~ "Mis-recorded",
@@ -135,18 +165,30 @@ fruiting_r_cleaned <- fruiting_r_trimmed |>
       species == "Fraxinus excelsior" & month > 12 | species == "Fraxinus excelsior" & month < 7 ~ "Mis-recorded",
       species == "Hippophae rhamnoides" & month > 3 & month < 8 ~ "Mis-recorded",
       species == "Ilex aquifolium" & month > 3 & month < 10 ~ "Mis-recorded",
+      # species == "Juniperus communis"
       # species == "Ligustrum vulgare" & month > 11 | species == "Ligustrum vulgare" & month < 8 ~ "Mis-recorded",
       species == "Malus sylvestris" & month > 11 | species == "Malus sylvestris" & month < 8 ~ "Mis-recorded",
+      # species == "Pinus sylvestris"
+      # species == "Populus nigra subsp. betulifolia"
+      # species == "Populus tremula"
       species == "Prunus avium" & month > 8 | species == "Prunus avium" & month < 6 ~ "Mis-recorded",
+      # species == "Prunus padus"
       species == "Prunus spinosa" & month > 11 | species == "Prunus spinosa" & month < 8 ~ "Mis-recorded",
+      # species == "Quercus petraea"
       species == "Quercus robur" & month > 12 | species == "Quercus robur" & month < 8 ~ "Mis-recorded",
       species == "Rhamnus cathartica" & month > 11 | species == "Rhamnus cathartica" & month < 9 ~ "Mis-recorded",
+      # species == "Salix spp."
       species == "Sambucus nigra" & month > 11 | species == "Sambucus nigra" & month < 8 ~ "Mis-recorded",
       species == "Sorbus aria" & month > 10 | species == "Sorbus aria" & month < 8 ~ "Mis-recorded",
       species == "Sorbus aucuparia" & month > 11 | species == "Sorbus aucuparia" & month < 7 ~ "Mis-recorded",
+      # species == "Sorbus domestica"
+      # species == "Sorbus torminalis"
+      # species == "Taxus baccata"
       species == "Tilia cordata" & month > 11 | species == "Tilia cordata" & month < 9 ~ "Mis-recorded",
+      # species == "Tilia platyphyllos"
       species == "Tilia x europaea" & month > 11 | species == "Tilia x europaea" & month < 9 ~ "Mis-recorded",
       species == "Ulmus glabra" & month > 7 | species == "Ulmus glabra" & month < 4 ~ "Mis-recorded",
+      # species == "Ulmus minor"
       species == "Viburnum lantana" & month > 10 | species == "Viburnum lantana" & month < 6 ~ "Mis-recorded",
       species == "Viburnum opulus" & month > 10 | species == "Viburnum opulus" & month < 7 ~ "Mis-recorded",
       TRUE ~ "Probably ok"
@@ -167,23 +209,30 @@ chance of finding a ripe acorn during the beginning of September is equal to
 chance of finding one in late September. To visually encode this information,
 a ridgeline plot is used, facilitated by the R package `ggridges`.
 
-```{r ridgeline}
+```{r ridgeline, include=FALSE}
+
+sysfonts::font_add("Georgia", "C:/Windows/Fonts/Georgia.ttf")
+
+showtext::showtext_opts(dpi = 300)
+
+showtext::showtext_auto()
 
 calendar <- ggplot2::ggplot(fruiting_r_cleaned, 
                             ggplot2::aes(x = yday, 
-                                         y = forcats::fct_rev(species),
-                                         # height = ..density..
-                                         fill = 0.5 - abs(0.5 - stat(ecdf))
-                                         )
+                                         y = forcats::fct_rev(species))
                             ) +
-              # ggridges::geom_density_ridges(stat = "density", trim = TRUE) +
+              # ggridges::geom_density_ridges(scale = 0.95,
+              #                               rel_min_height = 0.01,
+              #                               fill = "#df7b6e",
+              #                               # color = "transparent",
+              #                               color = "black") +
               ggridges::stat_density_ridges(geom = "density_ridges_gradient",
                                             calc_ecdf = TRUE,
                                             scale = 0.9,
                                             rel_min_height = 0.01) +
               ggplot2::scale_fill_viridis_c(name = "Tail probability", direction = -1) +
-              ggplot2::scale_x_continuous(breaks = seq(0, 380, 30),
-                                          # guide=guide_axis(angle=90),
+              ggplot2::scale_x_continuous(expand = c(0,0),
+                                          breaks = seq(0, 380, 30),
                                           labels = c("Jan", "Feb", "Mar",
                                                      "Apr", "May", "Jun",
                                                      "Jul", "Aug", "Sep",
@@ -192,27 +241,35 @@ calendar <- ggplot2::ggplot(fruiting_r_cleaned,
                                           ) +
               ggplot2::coord_cartesian(clip = "on") +
               ggridges::theme_ridges() +
-              ggplot2::labs(title = 'Seed Collection Calendar for Native Trees') +
+              # ggplot2::labs(title = 'Seed Collection Calendar for Native Trees') +
               ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust = -0.15),
                              plot.title = ggplot2::element_text(size = 20,
                                                                 hjust = 0.5,
                                                                 margin = ggplot2::margin(0,0,30,0)),
                              axis.title.x = ggplot2::element_blank(),
                              axis.title.y = ggplot2::element_blank(),
-                             legend.position = "none"
-
+                             legend.position = "none",
+                             # plot.background = ggplot2::element_rect(fill = '#FFFFFA'),
+                             text = ggplot2::element_text(family = "Georgia")
                            )
-              NULL
+
+calendar
 
 ```
 
-```{r save_ridgeline, message=FALSE, warning=FALSE, include=FALSE}
+```{r save_ridgeline, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
 
 aspect_ratio <- 0.8
 height <- 13
 ggplot2::ggsave("calendar.png", height = height, width = height * aspect_ratio)
 
+showtext::showtext_auto(enable = FALSE)
+
 ```
+
+
+
+## Plot observation counts
 
 ```{r obs_count}
 
